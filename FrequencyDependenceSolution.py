@@ -33,18 +33,58 @@ def S(z_values, xt, gt, epst, N):
         s[k+6] = ( (s[k]+epst*s[k+2])/((k+9)*(k+6))
                   - xt*s[k+5]/(k+9) - gt*s[k+3]/(k+9) )
     
-    # Compute the series solution S(z) for multiple z-values:
+    # Compute the partial sums of S(z), all the way up to the N:th term:
     
-    k_values = np.arange(N)
-    z_powers = np.power(z_values[:, np.newaxis], k_values + 3) 
-    S_values = np.dot(z_powers, s)
+    k_values     = np.arange(N)
+    z_powers     = np.power(z_values[:, np.newaxis], k_values + 3)
+    partial_sums = np.zeros((N, len(z_values)))
 
-    # Compute the derivative (dS/dz)/(z^2):
+    for n in range(1, N + 1):
+        partial_sums[n-1] = np.dot(z_powers[:, :n], s[:n])
     
-    zder_powers = np.power( z_values[:, np.newaxis], k_values ) 
-    Sder_values = np.dot( zder_powers, s*(k_values + 3) )
-    
-    return S_values, Sder_values, s
+    return partial_sums
+
+
+def ShanksTransform(series, z_values, xt, gt, epst, N):
+
+    # Read in all the needed partial sums:
+
+    s = series(z_values, xt, gt, epst, N+1)
+
+    s_Np1 = s[N+1]
+    s_N   = s[N]
+    s_Nm1 = s[N-1]
+
+    denominator = s_Np1 - 2*s_N + s_Nm1
+    if np.any(denominator == 0):
+        series_shanks = s_N
+    else:
+        series_shanks = s_Np1 - ((s_Np1 - s_N)**2)/(s_Np1 - 2*s_N + s_Nm1)
+
+    return series_shanks
+
+def ShanksTransform_it(series, z_values, xt, gt, epst, N):
+
+    s_Np1 = ShanksTransform(series, z_values, xt, gt, epst, N+1)
+    s_N   = ShanksTransform(series, z_values, xt, gt, epst, N)
+    s_Nm1 = ShanksTransform(series, z_values, xt, gt, epst, N-1)
+
+    denominator = s_Np1 - 2*s_N + s_Nm1
+    if np.any(denominator == 0):
+        series_shanks = s_N
+    else:
+        series_shanks = s_Np1 - ((s_Np1 - s_N)**2)/(s_Np1 - 2*s_N + s_Nm1)
+
+    return series_shanks
+
+xt = 7.0; gt = 0.0; epst = 0.0; N = 170
+z_values = np.array([4.0])
+Values0 = S(z_values, xt, gt, epst, N)
+Values = ShanksTransform_it(S, z_values, xt, gt, epst, N)
+print( Values0[-1] )
+print( Values )
+
+
 
 def P_andmore(z_values, xt, gt, epst, N, limit = 'pos'):
     """ Evaluate the second solution P(z) for multiple z-values.
@@ -92,7 +132,7 @@ def P_andmore(z_values, xt, gt, epst, N, limit = 'pos'):
         LimitRatio = P_values[0]/S_values[0]
 
 
-    return P_values, Pder_values, S_values, Sder_values, LimitRatio
+    return P_values, S_values, LimitRatio
 
 
 
@@ -107,10 +147,10 @@ def Solution(z_values, xt, gt, epst, N):
 
     # Get the solution for positive and negative z:
 
-    ( P_valuespos, Pder_valuespos, S_valuespos, Sder_valuespos, LimitRatiopos) = (
+    ( P_valuespos, S_valuespos, LimitRatiopos) = (
       P_andmore(z_values_pos, xt, gt, epst, N, limit = 'pos') )
     
-    ( P_valuesneg, Pder_valuesneg, S_valuesneg, Sder_valuesneg, LimitRationeg) = (
+    ( P_valuesneg, S_valuesneg, LimitRationeg) = (
       P_andmore(z_values_neg, xt, gt, epst, N, limit = 'neg') )
 
     Solution_pos = P_valuespos - S_valuespos*LimitRatiopos
@@ -119,13 +159,6 @@ def Solution(z_values, xt, gt, epst, N):
     # Put them together to get f(z):
 
     Solution = np.concatenate((Solution_neg, Solution_pos))
-
-    # Also get df/dz:
-
-    Derivative_pos = Pder_valuespos - Sder_valuespos*LimitRatiopos
-    Derivative_neg = Pder_valuesneg - Sder_valuesneg*LimitRationeg
-
-    Derivative = np.concatenate((Derivative_neg, Derivative_pos))
 
     # Get (z^(-2))*df/dz(+) - (z^(-2))*df/dz(-) near the origin:
 
@@ -192,4 +225,15 @@ plt.rcParams['axes.linewidth'] = 2.7
 plt.rcParams['grid.linewidth'] = 2.7
 plt.rcParams['grid.linestyle'] = '--'
 
+"""xt = 7.0; gt = 0.0; epst = 0.0
+z_values = np.array([4.0])
+N = np.arange( 10, 200, step = 1 )
 
+Trunc  = np.array([ abs(S(z_values, xt, gt, epst, n)[-1]) for n in N ])
+#Shanks = np.array([ abs(ShanksTransform(S, z_values, xt, gt, epst, n)) for n in N ])
+Shanks2 = np.array([ abs(ShankTransform_it(S, z_values, xt, gt, epst, N)) for n in N ])
+
+plt.semilogy( N, Trunc, color = 'red' )
+#plt.semilogy( N, Shanks, color = 'blue' )
+plt.semilogy( N, Shanks2, color = 'black' )
+plt.show()"""
